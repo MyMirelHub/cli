@@ -36,6 +36,7 @@ type ListOutput struct {
 	GRPCPort           int      `csv:"GRPC PORT" json:"grpcPort"           yaml:"grpcPort"`
 	AppPort            int      `csv:"APP PORT"  json:"appPort"            yaml:"appPort"`
 	MetricsEnabled     bool     `csv:"-"         json:"metricsEnabled"     yaml:"metricsEnabled"` // Not displayed in table.
+	MetricsPort        int      `csv:"-"         json:"metricsPort"        yaml:"metricsPort"`    // Not displayed in table.
 	Command            string   `csv:"COMMAND"   json:"command"            yaml:"command"`
 	Age                string   `csv:"AGE"       json:"age"                yaml:"age"`
 	Created            string   `csv:"CREATED"   json:"created"            yaml:"created"`
@@ -124,6 +125,8 @@ func List() ([]ListOutput, error) {
 				enableMetrics = true
 			}
 
+			metricsPort := getIntArg(argumentsMap, "--metrics-port", runtime.DefaultMetricsPort)
+
 			maxRequestBodySize := getIntArg(argumentsMap, "max-body-size", runtime.DefaultMaxRequestBodySize)
 
 			httpReadBufferSize := getIntArg(argumentsMap, "read-buffer-size", runtime.DefaultReadBufferSize)
@@ -179,6 +182,7 @@ func List() ([]ListOutput, error) {
 				GRPCPort:           grpcPort,
 				AppPort:            appPort,
 				MetricsEnabled:     enableMetrics,
+				MetricsPort:        metricsPort,
 				Command:            utils.TruncateString(appCmd, 20),
 				MaxRequestBodySize: maxRequestBodySize,
 				HTTPReadBufferSize: httpReadBufferSize,
