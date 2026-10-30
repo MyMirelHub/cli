@@ -105,6 +105,14 @@ func Health(ctx context.Context, w io.Writer, o Options, ho HealthOptions) error
 func healthOf(ctx context.Context, t target) report {
 	r := report{Name: t.Name}
 
+	if t.HealthAddr != "" {
+		if h := checkHealth(ctx, t.HealthAddr, "/healthz"); h.ok() {
+			r.addf("healthz", levelOK, "%d on %s", h.Code, t.HealthAddr)
+		} else {
+			r.addf("healthz", levelFail, "%s on %s", dash(h.Err), t.HealthAddr)
+		}
+	}
+
 	var md *metadata
 	if t.isSidecar() {
 		h := checkHealth(ctx, t.HTTPAddr, "/v1.0/healthz")
@@ -221,6 +229,7 @@ func metricChecks(r *report, snap *snapshot, sidecar bool) {
 			fmtCount(goroutines), fmtBytes(snap.total("go_memstats_heap_inuse_bytes", nil)), note)
 	}
 	if !sidecar {
+		controlPlaneChecks(r, snap)
 		return
 	}
 

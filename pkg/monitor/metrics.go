@@ -205,7 +205,7 @@ func Metrics(ctx context.Context, w io.Writer, o Options, so SummaryOptions) err
 }
 
 func printSummary(w io.Writer, s *snapshot, o SummaryOptions) {
-	printed := 0
+	printed := printControlPlane(w, s, o)
 	countHeader := "COUNT"
 	if o.window > 0 {
 		countHeader = "REQ/S"

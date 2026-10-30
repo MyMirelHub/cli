@@ -14,6 +14,7 @@ limitations under the License.
 package monitor
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -161,4 +162,72 @@ func TestRender(t *testing.T) {
 	assert.Equal(t, "1.50s", fmtMs(1500))
 	assert.Equal(t, "1.0KiB", fmtBytes(1024))
 	assert.Equal(t, "<0.01", fmtRate(0.001))
+}
+
+const schedulerSample = `# TYPE etcd_server_has_leader gauge
+etcd_server_has_leader %s
+# TYPE etcd_mvcc_db_total_size_in_bytes gauge
+etcd_mvcc_db_total_size_in_bytes 900
+# TYPE etcd_server_quota_backend_bytes gauge
+etcd_server_quota_backend_bytes %s
+# TYPE etcd_disk_wal_fsync_duration_seconds histogram
+etcd_disk_wal_fsync_duration_seconds_bucket{le="0.5"} 0
+etcd_disk_wal_fsync_duration_seconds_bucket{le="1"} %s
+etcd_disk_wal_fsync_duration_seconds_bucket{le="+Inf"} %s
+etcd_disk_wal_fsync_duration_seconds_sum 1
+etcd_disk_wal_fsync_duration_seconds_count %s
+# TYPE dapr_scheduler_sidecars_connected gauge
+dapr_scheduler_sidecars_connected 2
+# TYPE dapr_scheduler_jobs_triggered_total counter
+dapr_scheduler_jobs_triggered_total{type="job"} 10
+# TYPE dapr_scheduler_jobs_undelivered_total counter
+dapr_scheduler_jobs_undelivered_total{type="job"} %s
+`
+
+func checkLevels(r report) map[string]level {
+	out := map[string]level{}
+	for _, c := range r.Checks {
+		out[c.Name] = c.Level
+	}
+	return out
+}
+
+func TestSchedulerChecks(t *testing.T) {
+	run := func(leader, quota, fsyncs, undelivered string) map[string]level {
+		s := mustParse(t, fmt.Sprintf(schedulerSample, leader, quota, fsyncs, fsyncs, fsyncs, undelivered), time.Now())
+		require.True(t, isScheduler(s))
+		var r report
+		controlPlaneChecks(&r, s)
+		return checkLevels(r)
+	}
+
+	healthy := run("1", "9.2e+18", "10", "0")
+	assert.Equal(t, levelOK, healthy["etcd leader"])
+	assert.Equal(t, levelOK, healthy["etcd storage"], "the default local quota is effectively unlimited")
+	assert.Equal(t, levelOK, healthy["etcd writes"], "a few slow startup fsyncs do not warn")
+	assert.Equal(t, levelOK, healthy["jobs"])
+
+	assert.Equal(t, levelFail, run("0", "9.2e+18", "10", "0")["etcd leader"])
+	assert.Equal(t, levelWarn, run("1", "1000", "10", "0")["etcd storage"], "90% of a real quota")
+	assert.Equal(t, levelFail, run("1", "940", "10", "0")["etcd storage"])
+	assert.Equal(t, levelWarn, run("1", "9.2e+18", "500", "0")["etcd writes"], "sustained slow fsyncs warn")
+	assert.Equal(t, levelWarn, run("1", "9.2e+18", "10", "3")["jobs"])
+}
+
+func TestPlacementChecks(t *testing.T) {
+	const sample = `# TYPE dapr_placement_leader_status gauge
+dapr_placement_leader_status %s
+# TYPE dapr_placement_raft_leader_status gauge
+dapr_placement_raft_leader_status 1
+# TYPE dapr_placement_runtimes_total gauge
+dapr_placement_runtimes_total{namespace="default"} 3
+`
+	for leader, want := range map[string]level{"1": levelOK, "0": levelFail} {
+		s := mustParse(t, fmt.Sprintf(sample, leader), time.Now())
+		require.True(t, isPlacement(s))
+		require.False(t, isScheduler(s))
+		var r report
+		controlPlaneChecks(&r, s)
+		assert.Equal(t, want, checkLevels(r)["placement"])
+	}
 }

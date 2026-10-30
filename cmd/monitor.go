@@ -150,6 +150,7 @@ func addMonitorTargetFlags(c *cobra.Command) {
 	f.StringArrayVar(&monitorOpts.URLs, "url", nil, "Extra metrics endpoint as [name=]host:port, e.g. a control plane service (repeatable)")
 	f.IntVar(&monitorOpts.HTTPPort, "http-port", 0, "Dapr HTTP port of a sidecar to inspect instead of local Dapr instances")
 	f.IntVar(&monitorOpts.MetricsPort, "metrics-port", 0, "Metrics port of the sidecar given by --http-port")
+	f.BoolVar(&monitorOpts.ControlPlane, "control-plane", true, "Include the scheduler and placement started by 'dapr init' when they are running")
 }
 
 func init() {

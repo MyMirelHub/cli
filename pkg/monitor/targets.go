@@ -37,6 +37,9 @@ type Options struct {
 	// local daprd processes.
 	HTTPPort    int
 	MetricsPort int
+	// ControlPlane adds the scheduler and placement services started by
+	// `dapr init` when they are reachable on their default host ports.
+	ControlPlane bool
 }
 
 // target is one metrics endpoint to inspect. A sidecar has both a Dapr HTTP
@@ -46,6 +49,8 @@ type target struct {
 	PID        int    `json:"pid,omitempty"`
 	HTTPAddr   string `json:"httpAddr,omitempty"`
 	MetricsURL string `json:"metricsURL,omitempty"`
+	// HealthAddr is a control plane service's healthz server.
+	HealthAddr string `json:"healthAddr,omitempty"`
 }
 
 func (t target) isSidecar() bool { return t.HTTPAddr != "" }
@@ -100,6 +105,9 @@ func resolveTargets(ctx context.Context, o Options) ([]target, error) {
 			return nil, fmt.Errorf("listing Dapr instances: %w", err)
 		}
 		targets = append(targets, targetsFromList(list)...)
+		if o.ControlPlane {
+			targets = append(targets, controlPlaneTargets(ctx)...)
+		}
 	}
 	for _, u := range o.URLs {
 		targets = append(targets, parseURLTarget(u))

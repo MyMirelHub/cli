@@ -110,8 +110,12 @@ var signals = []indicator{
 	}},
 }
 
+func allIndicators() []indicator {
+	return append(append([]indicator{}, signals...), controlPlaneIndicators...)
+}
+
 func signalByName(name string) (indicator, bool) {
-	for _, s := range signals {
+	for _, s := range allIndicators() {
 		if s.name == name {
 			return s, true
 		}
@@ -132,15 +136,18 @@ type poller struct {
 
 func newPoller(t target, size int) *poller {
 	p := &poller{t: t, history: map[string]*ring{}}
-	for _, s := range signals {
+	for _, s := range allIndicators() {
 		p.history[s.name] = newRing(size)
 	}
 	return p
 }
 
 func (p *poller) poll(ctx context.Context) {
-	if p.t.isSidecar() {
+	switch {
+	case p.t.isSidecar():
 		p.healthy = checkHealth(ctx, p.t.HTTPAddr, "/v1.0/healthz")
+	case p.t.HealthAddr != "":
+		p.healthy = checkHealth(ctx, p.t.HealthAddr, "/healthz")
 	}
 	if p.t.MetricsURL == "" {
 		p.err = errors.New("metrics disabled")
@@ -161,7 +168,7 @@ func (p *poller) poll(ctx context.Context) {
 	}
 	p.window = delta(p.cur, p.prev)
 	w := p.cur.at.Sub(p.prev.at).Seconds()
-	for _, s := range signals {
+	for _, s := range allIndicators() {
 		p.history[s.name].push(s.value(p.window, p.cur, w))
 	}
 }
@@ -246,7 +253,7 @@ func topHeader(w io.Writer, title string, interval time.Duration) {
 
 func healthCell(p *poller) string {
 	switch {
-	case !p.t.isSidecar():
+	case !p.t.isSidecar() && p.t.HealthAddr == "":
 		if p.err != nil {
 			return red("✘ down")
 		}
@@ -263,6 +270,27 @@ func healthCell(p *poller) string {
 func renderOverview(w io.Writer, pollers []*poller, interval time.Duration) {
 	topHeader(w, "dapr top", interval)
 	fmt.Fprintln(w)
+	var sidecars, controlPlane []*poller
+	for _, p := range pollers {
+		if p.t.isSidecar() {
+			sidecars = append(sidecars, p)
+		} else {
+			controlPlane = append(controlPlane, p)
+		}
+	}
+	if len(sidecars) > 0 {
+		renderSidecarOverview(w, sidecars)
+	}
+	if len(controlPlane) > 0 {
+		if len(sidecars) > 0 {
+			fmt.Fprintln(w)
+		}
+		renderControlPlaneOverview(w, controlPlane)
+	}
+	fmt.Fprintln(w, dim("\n  dapr top -a <app-id> for a dashboard · dapr metrics graph <signal> -a <app-id> to chart one"))
+}
+
+func renderSidecarOverview(w io.Writer, pollers []*poller) {
 	trendW := max(termWidth()-110, 10)
 	tb := newTable(w, "APP ID", "HEALTH", "REQ/S", "ERR", "P99", "APP/S", "PUB/S", "SUB/S", "CPU", "HEAP", "GOROUTINES", "REQ/S TREND")
 	for _, p := range pollers {
@@ -284,7 +312,6 @@ func renderOverview(w io.Writer, pollers []*poller, interval time.Duration) {
 		)
 	}
 	tb.flush()
-	fmt.Fprintln(w, dim("\n  dapr top -a <app-id> for a dashboard · dapr metrics graph <signal> -a <app-id> to chart one"))
 }
 
 func errCell(pct float64) string {
@@ -313,13 +340,17 @@ func renderDetail(w io.Writer, p *poller, interval time.Duration, so SummaryOpti
 
 	sparkW := max(termWidth()-32, 10)
 	fmt.Fprintln(w)
-	for _, name := range detailSignals {
+	names := detailSignals
+	if !p.t.isSidecar() {
+		names = controlPlaneDetailSignals
+	}
+	for _, name := range names {
 		s, _ := signalByName(name)
 		r := p.history[name]
 		if allZeroOrNaN(r.values) && name != "rps" {
 			continue
 		}
-		fmt.Fprintf(w, "  %-11s %10s  %s\n", dim(name), s.format(r.last()), cyan(sparkline(r.values, sparkW)))
+		fmt.Fprintf(w, "  %-13s %10s  %s\n", dim(name), s.format(r.last()), cyan(sparkline(r.values, sparkW)))
 	}
 
 	so.window = p.windowDuration()

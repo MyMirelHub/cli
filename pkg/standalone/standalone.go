@@ -85,16 +85,24 @@ const (
 
 	errInstallTemplate = "please run `dapr uninstall` first before running `dapr init`"
 
-	healthPort = 58080
-	metricPort = 59090
+	healthPort = PlacementHealthHostPort
+	metricPort = PlacementMetricsHostPort
 
-	schedulerHealthPort = 58081
-	schedulerMetricPort = 59091
+	schedulerHealthPort = SchedulerHealthHostPort
+	schedulerMetricPort = SchedulerMetricsHostPort
 	schedulerEtcdPort   = 2379
 
 	daprVersionsWithScheduler = ">= 1.14.x"
 
 	daprVersionsWithSchedulerPlacement = ">= 1.19.x"
+)
+
+// Host ports that `dapr init` publishes for the control plane containers.
+const (
+	PlacementHealthHostPort  = 58080
+	PlacementMetricsHostPort = 59090
+	SchedulerHealthHostPort  = 58081
+	SchedulerMetricsHostPort = 59091
 )
 
 var (

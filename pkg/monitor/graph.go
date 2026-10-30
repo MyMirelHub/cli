@@ -29,7 +29,7 @@ import (
 // SignalHelp lists the named signals Graph accepts besides metric names.
 func SignalHelp() string {
 	var sb strings.Builder
-	for _, s := range signals {
+	for _, s := range allIndicators() {
 		fmt.Fprintf(&sb, "  %-11s %s\n", s.name, s.help)
 	}
 	return sb.String()
