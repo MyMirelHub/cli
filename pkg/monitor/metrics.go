@@ -241,11 +241,12 @@ func printSummary(w io.Writer, s *snapshot, o SummaryOptions) {
 			}
 		}
 
-		for i, g := range groups {
-			if o.Limit > 0 && i == o.Limit {
-				tb.row(dim(fmt.Sprintf("  … %d more, use -n 0", len(groups)-o.Limit)))
-				break
-			}
+		hidden := 0
+		if o.Limit > 0 && len(groups) > o.Limit {
+			hidden = len(groups) - o.Limit
+			groups = groups[:o.Limit]
+		}
+		for _, g := range groups {
 			key := labelKey(g.labels)
 			cells := []string{" "}
 			for j, l := range v.by {
@@ -269,6 +270,9 @@ func printSummary(w io.Writer, s *snapshot, o SummaryOptions) {
 			tb.row(cells...)
 		}
 		tb.flush()
+		if hidden > 0 {
+			fmt.Fprintln(w, dim(fmt.Sprintf("    … %d more, use -n 0", hidden)))
+		}
 	}
 
 	printed += printActors(w, s)
