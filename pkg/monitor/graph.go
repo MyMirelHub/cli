@@ -114,15 +114,18 @@ func Graph(ctx context.Context, w io.Writer, o Options, g GraphOptions) error {
 // metricSignal charts an arbitrary metric family, picking the natural
 // representation for its type.
 func metricSignal(name string, q float64, match matcher) indicator {
+	help, format := name+" per second", fmtRate
+	switch {
+	case strings.Contains(name, "latenc") || strings.HasSuffix(name, "_ms"):
+		// Dapr records every latency histogram in milliseconds.
+		help, format = fmt.Sprintf("p%g of %s", q*100, name), fmtMs
+	case strings.HasSuffix(name, "_bytes"):
+		help, format = name, fmtBytes
+	}
 	return indicator{
-		name: name,
-		help: name,
-		format: func(v float64) string {
-			if strings.HasSuffix(name, "_bytes") {
-				return fmtBytes(v)
-			}
-			return fmtRate(v)
-		},
+		name:   name,
+		help:   help,
+		format: format,
 		value: func(d, cur *snapshot, w float64) float64 {
 			f := cur.families[name]
 			if f == nil {
